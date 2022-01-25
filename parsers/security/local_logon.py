@@ -62,7 +62,7 @@ def parse(network, d, user_props, properties, mode):
     properties['title'] = d['MapDescription'] + f": Logon Type {logon_type} for user {user} authenticated as {target_user} from {host_pc} to {server} using Domain {domain_user}"
     properties['user'] = user
     properties['target_user'] = target_user
-    if server != 'localhost' and server != "-" and server != "::1" and logon_type in ["3", "8", "9", "10"] and target_user!="-":
+    if server != 'localhost' and server != "-" and server != "::1" and logon_type in ["3", "8", "9", "10"] and target_user!="-" and host_pc != server:
         if mode == 'user':
             add_node(network, user, user_props)
             add_node(network, target_user, user_props)
