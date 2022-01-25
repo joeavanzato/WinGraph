@@ -40,6 +40,7 @@ def parse_args():
     parser.add_argument("-m", "--mode", help="Node-Assigment Mode - User<->Host with Connection Type as Edge or Host<->Host with Users as Edge - 'user', 'host' - Default is User<->Host", required=False, nargs=1, type=str)
     parser.add_argument("-f", "--follow", help="Follow Newly-Discovered Hosts to Retrieve Additional Data - How many steps to follow", required=False, nargs=1, type=str)
     parser.add_argument('-p', '--parsed', help="Provide a directory containing pre-parsed Event Logs in CSV Format", required=False, nargs=1, type=str)
+    parser.add_argument('-exe', '--evtxecmd', help="Provide full dir containing EvtxECmd.exe and Maps directory.", required=False, nargs=1, type=str)
     args = parser.parse_args()
 
     if args.evidence_dir:
@@ -74,6 +75,12 @@ def parse_args():
             host_list[0] = args.hosts[0]
         arguments['hosts'] = host_list
 
+    if args.evtxecmd:
+        if not os.path.isdir(args.evtxecmd[0]):
+            print("Please provide a valid directory for EvtxECmd: "+str(args.evtxecmd[0]))
+        else:
+            arguments['evtxecmd_dir'] = args.evtxecmd[0]
+
     if args.follow:
         try:
             arguments['follow_steps'] = int(args.follow[0])
@@ -83,6 +90,15 @@ def parse_args():
             sys.exit(1)
     else:
         arguments['follow_steps'] = 0
+
+    if args.mode:
+        if args.mode[0] == "user" or args.mode[0] == "host":
+            arguments['mode'] = args.mode[0]
+        else:
+            print("Mode can currently only be 'user' or 'host' - defaulting to 'host'")
+            arguments['mode'] = 'host'
+    else:
+        arguments['mode'] = 'host'
 
     if args.parsed:
         if not os.path.isdir(args.parsed[0]):
@@ -103,23 +119,24 @@ def read_config(file):
             sys.exit(1)
     return config
 
+
 def update_evtxecmd():
-    file_list = os.listdir(os.getcwd())
-    if 'evtxecmd.exe' in file_list:
-        print("Found EvtxECmd Binary")
-        return
-    else:
-        evtx_url = 'https://f001.backblazeb2.com/file/EricZimmermanTools/EvtxECmd.zip'
-        evtz_zip = 'evtxecmd_zip.zip'
-        req = requests.get(evtx_url, stream=True)
-        with open(evtz_zip, 'wb') as f:
-            for chunk in req.iter_content(chunk_size=128):
-                f.write(chunk)
-        path = os.path.abspath(evtz_zip)
-        zip = zipfile.ZipFile(path)
-        zip.extractall('.')
-        zip.close()
+    print("Updating EvtxECmd.exe")
+    evtx_url = 'https://f001.backblazeb2.com/file/EricZimmermanTools/EvtxECmd.zip'
+    evtz_zip = 'evtxecmd_zip.zip'
+    req = requests.get(evtx_url, stream=True)
+    with open(evtz_zip, 'wb') as f:
+        for chunk in req.iter_content(chunk_size=128):
+            f.write(chunk)
+    path = os.path.abspath(evtz_zip)
+    zip = zipfile.ZipFile(path)
+    zip.extractall('.')
+    zip.close()
+    try:
         os.remove(evtz_zip)
+    except:
+        print("Could not clean-up EvtxECmd ZIP")
+        pass
 
 
 def event_log_list(dir):
@@ -133,11 +150,11 @@ def event_log_list(dir):
     return file_list
 
 
-def parse_logs(file_list):
-    evtx_binary = 'EvtxECmd\\EvtxECmd.exe'
+def parse_logs(file_list, evtxecmd_dir):
+    evtx_binary = evtxecmd_dir+'\\EvtxECmd.exe'
     count = 0
     for file in file_list:
-        command_string = evtx_binary + f' -f "{file}" --csv storage --csvf "{str(count)+"_"+os.path.basename(file)+".csv"}" --maps "EvtxECmd\\Maps"'
+        command_string = evtx_binary + f' -f "{file}" --csv storage --csvf "{str(count)+"_"+os.path.basename(file)+".csv"}" --maps "{evtxecmd_dir}\\Maps"'
         try:
             subprocess.run(command_string, check=True)
         except subprocess.CalledProcessError as e:
@@ -156,6 +173,7 @@ def path_create():
             print(e)
             sys.exit(1)
 
+
 def get_parsed_list(dir):
     file_list = []
     for root, dirs, files in os.walk(dir):
@@ -166,7 +184,8 @@ def get_parsed_list(dir):
     print(f"Found {str(len(file_list))} CSV Files")
     return file_list
 
-def formation(network, log_files):
+
+def formation(network, log_files, mode):
     fields = ['RecordNumber','EventRecordId','TimeCreated','EventId','Level','Provider','Channel','ProcessId','ThreadId',
               'Computer','ChunkNumber','UserId','MapDescription','UserName','RemoteHost','PayloadData1','PayloadData2',
               'PayloadData3','PayloadData4','PayloadData5','PayloadData6','ExecutableInfo','HiddenRecord','SourceFile',
@@ -181,20 +200,21 @@ def formation(network, log_files):
                 for i in range(len(row)):
                     d[fields[i]] = row[i]
                 if d['Provider'] == 'Microsoft-Windows-Security-Auditing':
-                    parse_security(network, d)
+                    parse_security(network, d, mode)
 
 
-def parse_security(network, d):
+def parse_security(network, d, mode):
     properties = {}
     user_props = {}
     user_props['color'] = 'green'
     properties['title'] = d['MapDescription']
     if d['EventId'] == '4648':
-        parsers.security.explicit_logon.parse(network, d, user_props, properties)
+        parsers.security.explicit_logon.parse(network, d, user_props, properties, mode)
     if d['EventId'] == '4624':
-        parsers.security.local_logon.parse(network, d, user_props, properties)
+        parsers.security.local_logon.parse(network, d, user_props, properties, mode)
     if d['EventId'] == '4778':
-        parsers.security.rdp_reconnect.parse(network, d, user_props, properties)
+        parsers.security.rdp_reconnect.parse(network, d, user_props, properties, mode)
+
 
 
 def add_node(network, node_name, node_properties):
@@ -226,16 +246,26 @@ def main():
     print("WINGRAPH - Event Log Graph Visualizer")
     arguments = parse_args()
     config = read_config('config.yml')
-    update_evtxecmd()
+
+    if not 'evtxecmd_dir' in arguments:
+        update_evtxecmd()
+        arguments['evtxecmd_dir'] = 'EvtxECmd'
+    elif not os.path.isfile(arguments['evtxecmd_dir']+"\\evtxecmd.exe"):
+        print("Could not find EvtxECmd.exe - updating now..")
+        update_evtxecmd()
+        arguments['evtxecmd_dir'] = 'EvtxECmd'
+    elif os.path.isfile(arguments['evtxecmd_dir']+"\\evtxecmd.exe"):
+        print("Found EvtxECmd.exe!")
+
     path_create()
     if 'evidence_directory' in arguments and not 'parsed_logs' in arguments:
         file_list = event_log_list(arguments['evidence_directory'])
-        parse_logs(file_list)
+        parse_logs(file_list, arguments['evtxecmd_dir'])
         log_files = get_parsed_list('storage')
     elif 'parsed_logs' in arguments:
         log_files = get_parsed_list(arguments['parsed_logs'])
     network = network_setup()
-    formation(network, log_files)
+    formation(network, log_files, arguments['mode'])
     show_network(network)
 
 

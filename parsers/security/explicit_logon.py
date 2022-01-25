@@ -12,7 +12,7 @@ def add_edge(network, node1, node2, edge_properties):
     for k,v in edge_properties.items():
         network.edges[node1,node2][k] = v
 
-def parse(network, d, user_props, properties):
+def parse(network, d, user_props, properties,mode):
     user_ = d['UserName']
     try:
         domain, user = user_.split('\\', 1)
@@ -54,12 +54,14 @@ def parse(network, d, user_props, properties):
     properties['target_user'] = target_user
 
     if server != 'localhost' and not host_pc in server:
-        #add_node(network, user, user_props)
-        #add_node(network, target_user, user_props)
-        #if host_pc != user:
-        #    add_edge(network, host_pc, user, properties)
-        #if user != target_user:
-        #    add_edge(network, user, target_user, properties)
-        #if target_user != server:
-        #    add_edge(network, target_user, server, properties)
-        add_edge(network, host_pc, server, properties)
+        if mode == 'user':
+            add_node(network, user, user_props)
+            add_node(network, target_user, user_props)
+            if host_pc != user:
+                add_edge(network, host_pc, user, properties)
+            if user != target_user:
+                add_edge(network, user, target_user, properties)
+            if target_user != server:
+                add_edge(network, target_user, server, properties)
+        elif mode == 'host':
+            add_edge(network, host_pc, server, properties)
