@@ -38,7 +38,10 @@ def parse(network, d, user_props, properties, mode):
 
     if mode == 'user':
         add_node(network, user, user_props)
-        add_edge(network, src_pc, user, properties)
-        add_edge(network, user, target_pc, properties)
+        if not network.has_edge(target_pc, user):
+            add_edge(network, target_pc, user, properties)
+        if not network.has_edge(user, src_pc):
+            add_edge(network, user, src_pc, properties)
     elif mode == 'host':
-        add_edge(network, src_pc, target_pc, properties)
+        if not network.has_edge(src_pc, target_pc):
+            add_edge(network, src_pc, target_pc, properties)
