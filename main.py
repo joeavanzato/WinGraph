@@ -13,6 +13,7 @@ import pyvis
 import parsers.security.explicit_logon
 import parsers.security.local_logon
 import parsers.security.rdp_reconnect
+import parsers.remconmanager.rdp_connection_established
 
 def parse_args():
     arguments = {}
@@ -201,6 +202,16 @@ def formation(network, log_files, mode):
                     d[fields[i]] = row[i]
                 if d['Provider'] == 'Microsoft-Windows-Security-Auditing':
                     parse_security(network, d, mode)
+                elif d['Provider'] == 'Microsoft-Windows-TerminalServices-RemoteConnectionManager':
+                    parse_remconman(network, d, mode)
+
+def parse_remconman(network, d, mode):
+    properties = {}
+    user_props = {}
+    user_props['color'] = 'green'
+    properties['title'] = d['MapDescription']
+    if d['EventId'] == '1149':
+        parsers.remconmanager.rdp_connection_established.parse(network, d, user_props, properties, mode)
 
 
 def parse_security(network, d, mode):
@@ -214,7 +225,6 @@ def parse_security(network, d, mode):
         parsers.security.local_logon.parse(network, d, user_props, properties, mode)
     if d['EventId'] == '4778':
         parsers.security.rdp_reconnect.parse(network, d, user_props, properties, mode)
-
 
 
 def add_node(network, node_name, node_properties):
@@ -247,6 +257,7 @@ def main():
     arguments = parse_args()
     config = read_config('config.yml')
 
+
     if not 'evtxecmd_dir' in arguments:
         update_evtxecmd()
         arguments['evtxecmd_dir'] = 'EvtxECmd'
@@ -258,12 +269,14 @@ def main():
         print("Found EvtxECmd.exe!")
 
     path_create()
+
     if 'evidence_directory' in arguments and not 'parsed_logs' in arguments:
         file_list = event_log_list(arguments['evidence_directory'])
         parse_logs(file_list, arguments['evtxecmd_dir'])
         log_files = get_parsed_list('storage')
     elif 'parsed_logs' in arguments:
         log_files = get_parsed_list(arguments['parsed_logs'])
+
     network = network_setup()
     formation(network, log_files, arguments['mode'])
     show_network(network)
