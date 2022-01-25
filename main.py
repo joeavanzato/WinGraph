@@ -246,7 +246,9 @@ def network_setup():
 
 def show_network(network):
     p_net = pyvis.network.Network(height='100%', width='100%', bgcolor='#222222', font_color='white', directed=True)
-    p_net.hrepulsion(damping=.9, central_gravity=.0005, spring_strength=.0005, spring_length=200, node_distance=100)
+    #p_net.set_edge_smooth('dynamic')
+    p_net.set_edge_smooth('continuous')
+    p_net.hrepulsion(damping=.9, central_gravity=.0005, spring_strength=.0005, spring_length=300, node_distance=200)
     p_net.from_nx(network)
     p_net.show('base.html')
     networkx.write_graphml(network, 'output.graphml')
