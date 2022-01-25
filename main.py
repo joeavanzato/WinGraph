@@ -5,6 +5,14 @@ import argparse
 import requests
 import zipfile
 import subprocess
+import csv
+import networkx
+import pyvis
+
+
+import parsers.security.explicit_logon
+import parsers.security.local_logon
+import parsers.security.rdp_reconnect
 
 def parse_args():
     arguments = {}
@@ -12,6 +20,18 @@ def parse_args():
     ### WinGraph ###
     Collect Remote Event Logs and Graph Connections
     Assist in Identifying Lateral Movement and Abnormal Activity
+    
+    --ed / --evidence_dir - Provide a directory containing, with any nesting, Event Log (.evtx) Files which will be used for analysis.
+    -t / --target_list - Provide a file which is a line-delimited list of host-names from which Event Logs will be collected.
+    -uf / --users - Provide a comma-delimited list of users to filter for.
+    -hf / --hosts - Provide a comma-delimited list of hosts to filter for.
+    -m / --mode - Either 'user' or 'host' - defines how node-assigment and visualization is performed.
+    -f / --follow - How many steps to follow newly-discovered hosts for Event Log retrieval - default is 0.
+    -p / --parsed - Provide a Directory containing already-parsed Event Logs in CSV format (EvtxECmd output).
+    
+    Usage Examples:
+    py main.py -ed F:\\test
+    
     ''')
     parser.add_argument("-ed", "--evidence_dir", help="Directory containing pre-collected Windows Event Logs", required=False, nargs=1, type=str)
     parser.add_argument("-t", "--target_list", help="File containing line-delimited list of targets to collect Event Logs from (ShareMap and Copy)", required=False, nargs=1, type=str)
@@ -34,7 +54,7 @@ def parse_args():
         else:
             arguments['targets'] = args.target_list[0]
 
-    if not args.evidence_dir and not args.target_list:
+    if not args.evidence_dir and not args.target_list and not args.parsed:
         print("No Target List and No Evidence Directory Specified - Running against Local Event Logs")
         arguments['local'] = True
 
@@ -114,17 +134,16 @@ def event_log_list(dir):
 
 
 def parse_logs(file_list):
-
-
-
     evtx_binary = 'EvtxECmd\\EvtxECmd.exe'
+    count = 0
     for file in file_list:
-        command_string = evtx_binary + f' -f "{file}" --csv storage --maps "EvtxECmd\\Maps"'
+        command_string = evtx_binary + f' -f "{file}" --csv storage --csvf "{str(count)+"_"+os.path.basename(file)+".csv"}" --maps "EvtxECmd\\Maps"'
         try:
             subprocess.run(command_string, check=True)
         except subprocess.CalledProcessError as e:
             print(f"Error Executing: {command_string}")
             print(e)
+        count += 1
 
 
 def path_create():
@@ -147,19 +166,78 @@ def get_parsed_list(dir):
     print(f"Found {str(len(file_list))} CSV Files")
     return file_list
 
+def formation(network, log_files):
+    fields = ['RecordNumber','EventRecordId','TimeCreated','EventId','Level','Provider','Channel','ProcessId','ThreadId',
+              'Computer','ChunkNumber','UserId','MapDescription','UserName','RemoteHost','PayloadData1','PayloadData2',
+              'PayloadData3','PayloadData4','PayloadData5','PayloadData6','ExecutableInfo','HiddenRecord','SourceFile',
+              'Keywords','ExtraDataOffset','Payload']
+    for file in log_files:
+        print(f"PARSING: {file}")
+        with open(file, 'r', encoding='utf-8') as f:
+            reader = csv.reader(f)
+            for row in reader:
+                d = {}
+                i = 0
+                for i in range(len(row)):
+                    d[fields[i]] = row[i]
+                if d['Provider'] == 'Microsoft-Windows-Security-Auditing':
+                    parse_security(network, d)
+
+
+def parse_security(network, d):
+    properties = {}
+    user_props = {}
+    user_props['color'] = 'green'
+    properties['title'] = d['MapDescription']
+    if d['EventId'] == '4648':
+        parsers.security.explicit_logon.parse(network, d, user_props, properties)
+    if d['EventId'] == '4624':
+        parsers.security.local_logon.parse(network, d, user_props, properties)
+    if d['EventId'] == '4778':
+        parsers.security.rdp_reconnect.parse(network, d, user_props, properties)
+
+
+def add_node(network, node_name, node_properties):
+    network.add_node(node_name)
+    for k,v in node_properties.items():
+        network.nodes[node_name][k] = v
+
+
+def add_edge(network, node1, node2, edge_properties):
+    network.add_edge(node1, node2)
+    for k,v in edge_properties.items():
+        network.edges[node1,node2][k] = v
+
+
+def network_setup():
+    net = networkx.Graph()
+    return net
+
+
+def show_network(network):
+    p_net = pyvis.network.Network(height='100%', width='100%', bgcolor='#222222', font_color='white', directed=True)
+    p_net.hrepulsion(damping=.9, central_gravity=.0005, spring_strength=.0005, spring_length=200, node_distance=100)
+    p_net.from_nx(network)
+    p_net.show('base.html')
+    networkx.write_graphml(network, 'output.graphml')
+
+
 def main():
     print("WINGRAPH - Event Log Graph Visualizer")
     arguments = parse_args()
     config = read_config('config.yml')
     update_evtxecmd()
     path_create()
-    if 'evidence_directory' in arguments:
+    if 'evidence_directory' in arguments and not 'parsed_logs' in arguments:
         file_list = event_log_list(arguments['evidence_directory'])
-        if not 'parsed_logs' in arguments:
-            parse_logs(file_list)
-            log_files = get_parsed_list('storage')
-        else:
-            log_files = get_parsed_list(arguments['parsed_logs'])
+        parse_logs(file_list)
+        log_files = get_parsed_list('storage')
+    elif 'parsed_logs' in arguments:
+        log_files = get_parsed_list(arguments['parsed_logs'])
+    network = network_setup()
+    formation(network, log_files)
+    show_network(network)
+
 
 
 
