@@ -59,7 +59,6 @@ def parse(network, d, user_props, properties, mode):
         logon_type = "NA"
     properties['LogonType'] = logon_type
 
-    properties['title'] = d['MapDescription'] + f": Logon Type {logon_type} for user {user} authenticated as {target_user} from {server} to {host_pc} using Domain {domain_user}"
     properties['user'] = user
     properties['target_user'] = target_user
     if server != 'localhost' and server != "-" and server != "::1" and logon_type in ["3", "8", "9", "10"] and target_user!="-" and host_pc != server:
@@ -73,4 +72,5 @@ def parse(network, d, user_props, properties, mode):
             if target_user != server:
                 add_edge(network, target_user, server, properties)
         elif mode == 'host':
+            properties['title'] = d['MapDescription'] + f": Logon Type {logon_type} for user {user} authenticated as {target_user} from {host_pc} to {server} using Domain {domain_user}"
             add_edge(network, host_pc, server, properties)

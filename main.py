@@ -201,7 +201,8 @@ def formation(network, log_files, mode):
                 for i in range(len(row)):
                     d[fields[i]] = row[i]
                 if d['Provider'] == 'Microsoft-Windows-Security-Auditing':
-                    parse_security(network, d, mode)
+                    #parse_security(network, d, mode)
+                    pass
                 elif d['Provider'] == 'Microsoft-Windows-TerminalServices-RemoteConnectionManager':
                     parse_remconman(network, d, mode)
 

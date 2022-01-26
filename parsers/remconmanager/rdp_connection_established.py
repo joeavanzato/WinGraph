@@ -33,7 +33,6 @@ def parse(network, d, user_props, properties, mode):
     target_pc = target_pc.lower().strip()
 
 
-    properties['title'] = d['MapDescription'] + f": User {user} authenticated as {user} from {src_pc} to {target_pc} using Domain {domain}"
     properties['user'] = user
 
     if mode == 'user':
@@ -44,4 +43,5 @@ def parse(network, d, user_props, properties, mode):
             add_edge(network, user, src_pc, properties)
     elif mode == 'host':
         if not network.has_edge(src_pc, target_pc):
+            properties['title'] = d['MapDescription'] + f": {src_pc} to {target_pc} using {domain}\\{user}"
             add_edge(network, src_pc, target_pc, properties)
