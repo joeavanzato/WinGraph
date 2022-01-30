@@ -206,6 +206,7 @@ def formation(network, log_files, mode):
                 elif d['Provider'] == 'Microsoft-Windows-TerminalServices-RemoteConnectionManager':
                     parse_remconman(network, d, mode)
 
+
 def parse_remconman(network, d, mode):
     properties = {}
     user_props = {}
